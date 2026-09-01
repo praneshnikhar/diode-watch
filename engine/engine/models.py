@@ -8,6 +8,8 @@ constraint: no external services, no labels, no feedback path required.
 
 from __future__ import annotations
 
+from collections import deque
+
 import numpy as np
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
@@ -22,12 +24,10 @@ class _AnomalyModel:
         self.contamination = contamination
         self.model: IsolationForest | None = None
         self.scaler: StandardScaler | None = None
-        self.samples: list[list[float]] = []
+        self.samples: deque[list[float]] = deque(maxlen=3000)
 
     def add_sample(self, vec: list[float]) -> None:
         self.samples.append(vec)
-        if len(self.samples) > 3000:
-            self.samples = self.samples[-3000:]
 
     def fit(self) -> bool:
         if len(self.samples) < MIN_SAMPLES:

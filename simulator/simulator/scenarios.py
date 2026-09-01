@@ -117,7 +117,7 @@ class SynFloodEp(Scenario):
     gt_key = "dst"
     attack = True
 
-    def __init__(self, rng, fps, rate=3000.0):
+    def __init__(self, rng, fps, rate=120.0):
         super().__init__(rng, fps)
         self.rate = rate
 
@@ -140,7 +140,7 @@ class UdpAmpEp(Scenario):
     gt_key = "dst"
     attack = True
 
-    def __init__(self, rng, fps, rate=1000.0):
+    def __init__(self, rng, fps, rate=80.0):
         super().__init__(rng, fps)
         self.rate = rate
 
@@ -172,7 +172,8 @@ class C2BeaconScenario(Scenario):
                 self.hosts[h] = sim_ts + self.rng.uniform(0, 60)
         for host, due in list(self.hosts.items()):
             while due <= sim_ts:
-                self.hosts[host] = due + max(10.0, self.rng.gauss(60, 1.5))
+                due = due + max(10.0, self.rng.gauss(60, 1.5))
+                self.hosts[host] = due
                 self._emit(fl.make_flow(
                     sim_ts, host, fl.C2_HTTP, fl.ephem_port(self.rng), 443, "tcp",
                     self.rng.randint(3, 8), self.rng.randint(200, 600),

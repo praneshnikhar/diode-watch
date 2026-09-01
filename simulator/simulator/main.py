@@ -31,6 +31,7 @@ async def run(args: argparse.Namespace) -> None:
                 break
             sim_dt = step * args.speed
             orch.tick(sim_ts, sim_dt, emitter.emit_flow)
+            emitter.flush()
             sim_ts += sim_dt
             now = time.monotonic()
             if now - last_log >= 10:

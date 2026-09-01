@@ -52,7 +52,7 @@ services:
       dockerfile: simulator/Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
-      SPEED: "60"
+      SPEED: "4"
       FLOWS_PER_SEC: "800"
       SCENARIO_SEED: "42"
     depends_on:

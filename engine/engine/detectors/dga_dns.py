@@ -11,7 +11,7 @@ from ..features import dga_features, shannon_entropy
 from ..schema import Alert, Flow, severity_for
 from .base import Detector
 
-DGA_THRESHOLD = 0.65
+DGA_THRESHOLD = 0.8
 
 
 class DgaDnsDetector(Detector):

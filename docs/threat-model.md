@@ -41,7 +41,7 @@ benign-domain corpus), digit/vowel ratio, label count, TLD reputation,
 hex-lookalike flag, qtype.
 
 **Decision**:
-- LightGBM binary classifier (threshold 0.65) → `DGA_DOMAIN`
+- logistic regression binary classifier (threshold 0.80) → `DGA_DOMAIN`
   (heuristic fallback if no model)
 - entropy ≥3.6 and length ≥40, or entropy ≥4.3 and length ≥25 → `DNS_TUNNEL`
   (TXT/NULL qtype boosts confidence)

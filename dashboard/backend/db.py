@@ -37,6 +37,9 @@ def recent_alerts(limit: int = 50, threat_class: str | None = None,
         cur.execute(sql, params)
         rows = cur.fetchall()
     for r in rows:
+        # Expose the alert timestamp as epoch seconds (`ts`) to match the live
+        # WebSocket alert payload, which the dashboard renders with.
+        r["ts"] = r["time"].timestamp()
         r["time"] = r["time"].isoformat()
     return rows
 
@@ -47,7 +50,7 @@ def stats(since_sim_seconds: float = 3600.0) -> dict:
         cur.execute("""
             SELECT threat_class, severity, count(*) AS n
             FROM alerts
-            WHERE time > to_timestamp((SELECT max(time) FROM alerts) - %s)
+            WHERE time > (SELECT max(time) FROM alerts) - (%s * interval '1 second')
               AND occurrences = 1
             GROUP BY threat_class, severity
         """, (since_sim_seconds,))
@@ -56,7 +59,8 @@ def stats(since_sim_seconds: float = 3600.0) -> dict:
         out["total_alerts"] = cur.fetchone()["n"]
         cur.execute("""
             SELECT count(DISTINCT alert_id) AS sessions
-            FROM alerts WHERE time > to_timestamp((SELECT max(time) FROM alerts) - %s)
+            FROM alerts
+            WHERE time > (SELECT max(time) FROM alerts) - (%s * interval '1 second')
         """, (since_sim_seconds,))
         out["sessions"] = cur.fetchone()["sessions"]
     return out

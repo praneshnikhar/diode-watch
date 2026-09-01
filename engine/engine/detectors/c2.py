@@ -33,7 +33,11 @@ def periodicity_score(ts_arr: np.ndarray) -> float:
 
 class C2Detector(Detector):
     def process(self, flow: Flow) -> list[Alert]:
-        if flow.proto != "tcp" or flow.packets > 15 or flow.duration > 5.0:
+        # C2 beaconing is periodic *data* connections; SYN-only probes (e.g.
+        # spoofed-source SYN floods) are excluded so they don't masquerade as
+        # beacons.
+        if (flow.proto != "tcp" or flow.packets > 15 or flow.duration > 5.0
+                or flow.is_syn_only):
             return []
         key = f"c2:{flow.src_ip}:{flow.dst_ip}:{flow.dst_port}"
         self.ctx.store.push(key, flow.ts, flow, age=AGE)

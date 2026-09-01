@@ -46,7 +46,11 @@ def _load_ngram_corpus() -> tuple[set[str], float]:
                 for i in range(len(ds) - 2):
                     ngrams[ds[i:i + 3]] += 1
                     total += 1
-            keep = {ng for ng, c in ngrams.items() if c >= 3}
+            # Keep every trigram observed in the benign corpus. The corpus *is*
+            # the definition of benign, so even single-occurrence trigrams are
+            # legitimate; filtering by frequency would wrongly inflate anomaly
+            # scores for rare-but-valid names (e.g. "google").
+            keep = {ng for ng, c in ngrams.items() if c >= 1}
             return keep, float(total)
     return set(), 0.0
 

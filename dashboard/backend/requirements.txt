@@ -1,5 +1,5 @@
 fastapi
 uvicorn[standard]
-redis
+redis>=5.0,<8
 psycopg[binary]
 prometheus-client

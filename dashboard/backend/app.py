@@ -28,7 +28,8 @@ DATABASE_URL = os.environ.get("DATABASE_URL",
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.redis = redis.from_url(REDIS_URL, decode_responses=True)
+    app.state.redis = redis.from_url(REDIS_URL, decode_responses=True,
+                                     socket_timeout=None)
     await app.state.redis.ping()
     app.state.eval = Evaluator(app.state.redis, DATABASE_URL)
     await app.state.eval.catch_up()

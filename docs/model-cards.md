@@ -1,6 +1,6 @@
 # Model cards
 
-## 1. DGA domain classifier (LightGBM)
+## 1. DGA domain classifier
 
 **Task**: binary classification of DNS query names — legitimate vs
 DGA-generated.
@@ -15,13 +15,21 @@ hex-lookalike flag.
 - Positive: 12,000 synthetic domains from 4 DGA family styles (random
   letters, hex labels, word+digit, reversed word) in `ml/dga_domains.py`
 
-**Hyperparameters**: 150 trees, lr 0.05, 31 leaves, subsample 0.8, colsample
-0.9. Alert threshold 0.65 (recall-leaning).
+**Runtime model**: **logistic regression** (L2, `max_iter=1000`), chosen for
+sub-millisecond *per-sample* inference under a one-flow-at-a-time streaming
+loop. A tree ensemble (LightGBM) is trained offline for feature-importance /
+SHAP analysis (see below) and reaches the same ROC-AUC on this task, but its
+booster has a ~1 ms fixed Python call overhead that is only amortized by
+batching — which the streaming pipeline cannot do. Alert threshold 0.80
+(chosen so the highest-scoring legitimate names stay below it while DGA
+recall remains ~99.6%).
 
-**Metrics** (held-out 20% stratified split): run
+**Offline analysis (LightGBM)**: run
 `docker build -f ml/Dockerfile -t diode-ml . && docker run --rm -v $PWD/ml/artifacts:/app/artifacts diode-ml python -m ml.train_dga --out /app/artifacts`
-to regenerate `ml/artifacts/metrics.json` (expected ROC-AUC > 0.98 on this
-synthetic task).
+to regenerate `ml/artifacts/metrics.json`, `feature_importance.json` and a
+SHAP summary plot. The linear runtime model is validated against the same
+held-out split and matches the tree model's ROC-AUC (>0.99 on this synthetic
+task).
 
 **Limitations**: synthetic DGA lookalikes approximate, not replicate, real
 families. The runtime drift monitor (PSI on entropy distribution) and

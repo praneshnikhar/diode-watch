@@ -65,4 +65,6 @@ def test_tunnel_qname_entropy():
     rng = random.Random(3)
     q = tunnel_qname(rng)
     assert len(q) > 40
-    assert shannon_entropy(q.split(".")[0]) > 3.5
+    # The DNS tunnelling detector flags full-qname entropy >= 3.6 with
+    # length >= 40; assert the name actually trips that rule.
+    assert shannon_entropy(q) > 3.6

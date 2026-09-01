@@ -51,14 +51,14 @@ class Evaluator:
     async def catch_up(self) -> None:
         while True:
             res = await self.redis.xread({TRUTH_STREAM: self.last_id}, count=10000,
-                                         block=0)
+                                         block=1000)
+            if not res:
+                return
             for _, messages in res:
                 for mid, fields in messages:
                     if mid > self.last_id:
                         self.last_id = mid
                     self._add_truth(fields)
-            if not res:
-                return
             if len(res[0][1]) < 10000:
                 return
 

@@ -45,7 +45,7 @@ evidence — not actions.
                         │  ENGINE (asyncio worker) │     │
                         │  ─ window store          │     │
                         │  ─ 6 detectors           │     │
-                        │  ─ DGA LightGBM          │     │
+                        │  ─ DGA logistic regr.   │     │
                         │  ─ TLS/DDoS IsolationF.  │     │
                         │  ─ drift (PSI) + retrain │     │
                         └──────┬─────────┬─────────┴─────┘
@@ -130,8 +130,9 @@ horizontal scaling of additional workers with no code changes.
 
 - **Warmup** — engine fits IsolationForest models (TLS metadata, DDoS window
   profiles) from the first ~3 minutes (flow-time) of benign-only traffic.
-- **DGA classifier** — LightGBM trained on bundled legit-domain corpus +
-  synthetic DGA families, either at image build / offline script or at runtime.
+- **DGA classifier** — logistic regression trained on bundled legit-domain
+  corpus + synthetic DGA families, either at image build / offline script or
+  at runtime (fits in <1 s).
 - **Drift** — PSI over rolling DGA entropy windows; alarm at 0.25.
 - **Retraining** — engine command channel (`diode:commands`), n8n cron, or
   drift auto-trigger; fully in-process, no external data.

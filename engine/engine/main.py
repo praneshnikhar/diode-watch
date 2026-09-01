@@ -57,7 +57,9 @@ async def command_loop(ctx: Context) -> None:
 
 async def main() -> None:
     cfg = Config.from_env()
-    r = redis.from_url(cfg.redis_url, decode_responses=True)
+    # socket_timeout=None: the main loop uses a blocking XREADGROUP (block=1000);
+    # a client-side socket timeout would abort those reads under load.
+    r = redis.from_url(cfg.redis_url, decode_responses=True, socket_timeout=None)
     await r.ping()
 
     metrics = Metrics()
@@ -143,21 +145,29 @@ def _warmup_done(cfg: Config, ts_lo: float | None, ts_hi: float | None,
 
 
 async def throughput_pump(ctx: Context) -> None:
-    """Publish live throughput to the dashboard every second."""
+    """Publish live throughput to the dashboard every second.
+
+    Rate is computed as a delta over the actual elapsed wall time (not a fixed
+    1s interval), because the processing loop is CPU-bound and may starve the
+    event loop for longer than one second between samples.
+    """
     last_flows = 0.0
     last_alerts = 0.0
+    last_ts = time.time()
     while True:
         await asyncio.sleep(1)
         f = ctx.metrics.flows._value.get()
         a = float(ctx.metrics.alert_total())
-        fps = f - last_flows
-        aps = a - last_alerts
-        last_flows, last_alerts = f, a
+        now = time.time()
+        dt = now - last_ts
+        fps = (f - last_flows) / dt if dt > 0 else 0.0
+        aps = (a - last_alerts) / dt if dt > 0 else 0.0
+        last_flows, last_alerts, last_ts = f, a, now
         ctx.metrics.throughput.set(fps)
         ctx.metrics.alert_rate.set(aps)
         try:
             await ctx.redis.publish("diode:metrics", json.dumps({
-                "ts": time.time(), "flows_per_sec": round(fps, 1),
+                "ts": now, "flows_per_sec": round(fps, 1),
                 "alerts_per_sec": round(aps, 1),
                 "alerts_total": int(a), "flows_total": int(f),
                 "throughput_target": ctx.cfg.throughput_target,
