@@ -1,0 +1,112 @@
+{
+  "name": "Diode Watch — Drift-Triggered Retrain",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "7a1b2c3d-2001-4000-8000-000000000001",
+      "name": "Hourly",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-360, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/api/drift-check",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={}"
+      },
+      "id": "7a1b2c3d-2002-4000-8000-000000000002",
+      "name": "Compute Drift (PSI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [-120, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.drift ?? 0 }}",
+              "operation": "gt",
+              "value2": 0.25
+            }
+          ]
+        },
+        "combinator": "and"
+      },
+      "id": "7a1b2c3d-2003-4000-8000-000000000003",
+      "name": "Drift > 0.25?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [120, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/api/retrain",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\": \"dga\"}"
+      },
+      "id": "7a1b2c3d-2004-4000-8000-000000000004",
+      "name": "Retrain DGA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [360, -120]
+    },
+    {
+      "parameters": {},
+      "id": "7a1b2c3d-2005-4000-8000-000000000005",
+      "name": "NoOp",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [360, 120]
+    }
+  ],
+  "connections": {
+    "Hourly": {
+      "main": [
+        [
+          { "node": "Compute Drift (PSI)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Compute Drift (PSI)": {
+      "main": [
+        [
+          { "node": "Drift > 0.25?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Drift > 0.25?": {
+      "main": [
+        [
+          { "node": "Retrain DGA", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "NoOp", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Retrain DGA": {
+      "main": [
+        [
+          { "node": "NoOp", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

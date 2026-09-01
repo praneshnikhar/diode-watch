@@ -1,0 +1,142 @@
+{
+  "name": "Diode Watch — Alert Routing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "diode-alert",
+        "responseMode": "onReceived"
+      },
+      "id": "7a1b2c3d-0001-4000-8000-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-320, 0]
+    },
+    {
+      "parameters": {
+        "dataPropertyName": "body.severity",
+        "rules": [
+          { "value": "=CRITICAL", "operation": "equals" },
+          { "value": "=HIGH", "operation": "equals" },
+          { "value": "=MEDIUM", "operation": "equals" },
+          { "value": "=LOW", "operation": "equals" }
+        ],
+        "options": {}
+      },
+      "id": "7a1b2c3d-0002-4000-8000-000000000002",
+      "name": "Severity Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [-100, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $env.SLACK_WEBHOOK }}",
+              "operation": "notEmpty"
+            }
+          ]
+        },
+        "combinator": "and"
+      },
+      "id": "7a1b2c3d-0003-4000-8000-000000000003",
+      "name": "Slack configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [140, -120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"text\": \"DIODE-WATCH [{{ $json.body.severity }}] {{ $json.body.threat_class }} — {{ $json.body.src_ip }} -> {{ $json.body.dst_ip }} (conf {{ $json.body.confidence }}). {{ $json.body.explanation }}\"}"
+      },
+      "id": "7a1b2c3d-0004-4000-8000-000000000004",
+      "name": "Slack CRITICAL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [380, -240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"text\": \"DIODE-WATCH [{{ $json.body.severity }}] {{ $json.body.threat_class }} — {{ $json.body.src_ip }} -> {{ $json.body.dst_ip }} (conf {{ $json.body.confidence }})\"}"
+      },
+      "id": "7a1b2c3d-0005-4000-8000-000000000005",
+      "name": "Slack HIGH",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [380, 120]
+    },
+    {
+      "parameters": {},
+      "id": "7a1b2c3d-0006-4000-8000-000000000006",
+      "name": "NoOp",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [640, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "Severity Switch", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Severity Switch": {
+      "main": [
+        [
+          { "node": "Slack configured?", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Slack configured?", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "NoOp", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "NoOp", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "NoOp", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Slack configured?": {
+      "main": [
+        [
+          { "node": "Slack CRITICAL", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "NoOp", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Slack CRITICAL": {
+      "main": [
+        [
+          { "node": "NoOp", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Slack HIGH": {
+      "main": [
+        [
+          { "node": "NoOp", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

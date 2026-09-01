@@ -1,0 +1,91 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        { "expr": "rate(diode_flows_total[1m])", "legendFormat": "flows/s", "refId": "A" }
+      ],
+      "title": "Flow throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (threat_class) (rate(diode_alerts_total[5m]))",
+          "legendFormat": "{{threat_class}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Alert rate by threat class",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 3,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        { "expr": "diode_dga_drift_psi", "legendFormat": "PSI drift", "refId": "A" }
+      ],
+      "title": "DGA distribution drift (PSI)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 4,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        { "expr": "diode_retrains_total", "legendFormat": "retrains", "refId": "A" },
+        { "expr": "diode_window_keys", "legendFormat": "window keys", "refId": "B" }
+      ],
+      "title": "Model lifecycle",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["diode-watch"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "title": "Diode Watch",
+  "uid": "diode-watch",
+  "version": 1
+}

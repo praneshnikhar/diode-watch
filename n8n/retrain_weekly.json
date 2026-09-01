@@ -1,0 +1,98 @@
+{
+  "name": "Diode Watch — Weekly DGA Retrain",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "7a1b2c3d-1001-4000-8000-000000000001",
+      "name": "Weekly 02:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-200, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/api/retrain",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\": \"dga\"}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        }
+      },
+      "id": "7a1b2c3d-1002-4000-8000-000000000002",
+      "name": "Retrain DGA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [40, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.statusCode ?? 200 }}",
+              "operation": "between",
+              "value2": 200,
+              "value3": 299
+            }
+          ]
+        },
+        "combinator": "and"
+      },
+      "id": "7a1b2c3d-1003-4000-8000-000000000003",
+      "name": "Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [280, 0]
+    },
+    {
+      "parameters": {},
+      "id": "7a1b2c3d-1004-4000-8000-000000000004",
+      "name": "NoOp",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [520, 120]
+    }
+  ],
+  "connections": {
+    "Weekly 02:00": {
+      "main": [
+        [
+          { "node": "Retrain DGA", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Retrain DGA": {
+      "main": [
+        [
+          { "node": "Succeeded?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Succeeded?": {
+      "main": [
+        [
+          { "node": "NoOp", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "NoOp", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

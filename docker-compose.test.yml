@@ -1,0 +1,9 @@
+services:
+  test:
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    command: pytest -q --tb=short
+    environment:
+      REDIS_URL: redis://localhost:16379
+      DATABASE_URL: postgresql://diode:diode@localhost:5433/diode
