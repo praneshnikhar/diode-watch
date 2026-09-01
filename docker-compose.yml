@@ -94,6 +94,7 @@ services:
       - "5678:5678"
     volumes:
       - n8n_data:/home/node/.n8n
+      - ./n8n:/opt/workflows:ro
 
   prometheus:
     image: prom/prometheus:latest
