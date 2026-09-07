@@ -95,15 +95,16 @@ async def main() -> None:
     flows = 0
 
     while True:
+        if not fitted and _warmup_done(cfg, ts_lo, ts_hi, t0):
+            fitted = True
+            status = ctx.models.fit_all()
+            print(f"[engine] warmup complete; models: {status}; "
+                  f"samples: {ctx.models.status()}")
+            await _event(ctx, "warmup_complete", ctx.models.status())
+
         batch = await r.xreadgroup(GROUP, CONSUMER, {STREAM: ">"},
                                    count=1000, block=1000)
         if not batch:
-            if not fitted and _warmup_done(cfg, ts_lo, ts_hi, t0):
-                fitted = True
-                status = ctx.models.fit_all()
-                print(f"[engine] warmup complete; models: {status}; "
-                      f"samples: {ctx.models.status()}")
-                await _event(ctx, "warmup_complete", ctx.models.status())
             continue
 
         for _, messages in batch:

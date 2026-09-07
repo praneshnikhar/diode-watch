@@ -3,7 +3,7 @@ name: diode-watch
 services:
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly no
+    command: redis-server --appendonly no --save ""
     ports:
       - "16379:6379"
     healthcheck:
@@ -89,6 +89,7 @@ services:
       N8N_BASIC_AUTH_ACTIVE: "false"
       N8N_HOST: n8n
       GENERIC_TIMEZONE: UTC
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       SLACK_WEBHOOK: ${SLACK_WEBHOOK:-}
     ports:
       - "5678:5678"

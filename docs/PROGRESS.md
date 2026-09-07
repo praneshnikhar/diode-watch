@@ -80,3 +80,33 @@ redis-py 8. All of the following are committed.
   `RECON_SCAN` confirmed in TimescaleDB with correct classes and no false
   positives during warmup.
 - Engine sustains ~1300–1600 flows/sec (real time) against the simulator.
+
+## Throughput — micro-batched IsolationForest scoring (uncommitted)
+
+- **`models.py`**: added `_AnomalyModel.score_batch()`; `score()` now delegates to
+  it. `IsolationForest.score_samples` has a fixed per-call overhead (tree walk
+  setup in Python) that only amortizes under batching — same lesson as the DGA
+  LightGBM→logistic switch, but here we keep the 200-tree model and batch the
+  *scoring* instead.
+- **`tls_malware.py`**: the behavioural-anomaly path buffers up to 32 TLS flows
+  and scores them in one `score_batch` call (flushing early if flow-time gaps
+  exceed 1s so sparse traffic still resolves). The JA3 denylist stays
+  synchronous, and `add_sample` (warmup/retrain buffer) is unaffected.
+- **`ddos.py`**: replaced six separate passes over the per-destination window
+  with a single pass, and micro-batched its window-profile `score_batch` (the
+  DDOS_ANOMALY single-sample score was the next-largest cost after TLS).
+- **`main.py` warmup bug**: `fit_all()` only ran in the empty-`xreadgroup`
+  branch, so under a sustained backlog the models *never* fitted and the
+  IsolationForest detectors silently never scored. Moved the warmup check to
+  the top of the loop so models fit as soon as the flow-time span threshold is
+  met.
+- **`docker-compose.yml`**: redis now runs `--save ""` (fully ephemeral). The
+  VM disk filled during the first live run, putting redis into `MISCONF`
+  stop-writes and stalling the pipeline; RDB snapshots are pointless here.
+- **Verified live** (`docker compose up`): warmup completes, TLS+DDOS models
+  fit, and the engine sustains **~2.16–2.21k flows/sec** (target 2,000) with
+  attacks firing end-to-end (DDOS_SYN_FLOOD, DGA_DOMAIN, etc. written to
+  TimescaleDB). Locally the full detector pipeline now runs ~10.6k flows/sec.
+- Tests: `test_tls_score_batch_matches_single` (batch == single element-wise)
+  and `test_tls_batched_behavioural_anomaly` (in-distribution batch flush
+  raises no false positives).

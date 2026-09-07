@@ -114,6 +114,50 @@ def test_tls_benign_ja3_no_alert(ctx):
     assert det.process(f) == []
 
 
+def test_tls_batched_behavioural_anomaly(ctx):
+    rng = np.random.RandomState(7)
+    warm = TlsMalwareDetector(ctx)
+    benign = [make_flow(ts=1000 + i * 0.01, dport=443, tls={
+        "ja3": f"benign{i:04x}",
+        "client_hello_size": int(rng.randint(280, 420)),
+        "server_hello_size": int(rng.randint(90, 220)),
+        "cert_depth": int(rng.choice([1, 2, 2, 3])),
+        "handshake_packets": int(rng.randint(6, 12)),
+        "cipher_entropy": round(float(rng.uniform(2.8, 4.2)), 2)})
+        for i in range(150)]
+    _run(warm, benign)
+    assert ctx.models.tls.fit() is True
+
+    # fresh detector: empty micro-batch buffer, model already fitted
+    det = TlsMalwareDetector(ctx)
+    more = [make_flow(ts=2000 + i * 0.01, src="10.0.1.50", dport=443, tls={
+        "ja3": f"seen{i:04x}", "client_hello_size": int(rng.randint(280, 420)),
+        "server_hello_size": int(rng.randint(90, 220)), "cert_depth": 2,
+        "handshake_packets": 8, "cipher_entropy": 3.5}) for i in range(40)]
+    # forces a micro-batch flush; benign-in-distribution flows must not alert
+    assert _run(det, more) == []
+
+
+def test_tls_score_batch_matches_single(ctx):
+    rng = np.random.RandomState(11)
+    warm = TlsMalwareDetector(ctx)
+    _run(warm, [make_flow(ts=1000 + i * 0.01, dport=443, tls={
+        "ja3": f"b{i:04x}", "client_hello_size": int(rng.randint(280, 420)),
+        "server_hello_size": int(rng.randint(90, 220)), "cert_depth": 2,
+        "handshake_packets": int(rng.randint(6, 12)),
+        "cipher_entropy": round(float(rng.uniform(2.8, 4.2)), 2)}) for i in range(150)])
+    assert ctx.models.tls.fit() is True
+
+    vecs = [[517.0, 92.0, 1.0, 10.0, 1.8, 0.8],
+            [350.0, 150.0, 2.0, 8.0, 3.5, 0.8],
+            [40.0, 20.0, 1.0, 2.0, 0.5, 0.2]]
+    batched = ctx.models.tls.score_batch(vecs)
+    single = [ctx.models.tls.score(v) for v in vecs]
+    for b, s in zip(batched, single):
+        assert b is not None and s is not None
+        assert abs(b - s) < 1e-9
+
+
 # ------------------------------------------------------------------- recon
 
 def test_recon_vertical_scan(ctx):

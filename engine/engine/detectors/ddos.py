@@ -15,8 +15,18 @@ from .base import Detector
 
 WINDOW = 10.0
 
+# Micro-batch the IsolationForest window-profile scoring for the same reason
+# as the TLS detector: `score_samples` has a fixed per-call overhead that only
+# amortizes under batching. DDOS_ANOMALY is decimated 1-in-20 flows anyway, so
+# buffering 32 of those costs no meaningful alert latency (cooldown is 15s).
+_BATCH = 32
+
 
 class DdosDetector(Detector):
+    def __init__(self, ctx):
+        super().__init__(ctx)
+        self._pending: list[tuple[Flow, list[float], int, int]] = []
+
     def process(self, flow: Flow) -> list[Alert]:
         alerts: list[Alert] = []
         if flow.proto not in ("tcp", "udp"):
@@ -34,16 +44,28 @@ class DdosDetector(Detector):
                 "pps": round(pps, 1), "window_s": WINDOW, "flows": len(src_entries),
             }, f"Source {flow.src_ip} emitted {pps:.0f} flows/sec over {WINDOW:.0f}s"))
 
-        # -- per-destination aggregate view ----------------------------------
+        # -- per-destination aggregate view (single pass over the window) ----
         dst_entries = self.ctx.store.window(f"ddos:dst:{flow.dst_ip}", flow.ts, WINDOW)
         n = len(dst_entries)
         if n >= 40:
-            srcs = {e.value.src_ip for e in dst_entries}
-            syn = sum(1 for e in dst_entries if e.value.is_syn_only) / n
-            udp = sum(1 for e in dst_entries if e.value.proto == "udp") / n
-            packets = sum(e.value.packets for e in dst_entries)
-            bytes_in = sum(e.value.bytes_in for e in dst_entries)
-            bytes_out = sum(e.value.bytes_out for e in dst_entries)
+            srcs: set[str] = set()
+            syn_count = 0
+            udp_count = 0
+            packets = 0
+            bytes_in = 0
+            bytes_out = 0
+            for e in dst_entries:
+                v = e.value
+                srcs.add(v.src_ip)
+                if v.is_syn_only:
+                    syn_count += 1
+                if v.proto == "udp":
+                    udp_count += 1
+                packets += v.packets
+                bytes_in += v.bytes_in
+                bytes_out += v.bytes_out
+            syn = syn_count / n
+            udp = udp_count / n
             asym = bytes_in / max(1.0, bytes_out)
             distinct = len(srcs)
 
@@ -60,19 +82,30 @@ class DdosDetector(Detector):
                     "bytes_asymmetry": round(asym, 1), "window_s": WINDOW,
                 }, f"UDP amplification: in/out byte ratio {asym:.0f}x from {distinct} sources"))
 
-            # -- unsupervised anomaly over the window profile ----------------
-            model = self.ctx.models.ddos
+            # -- unsupervised anomaly over the window profile (batched) -----
             if n % 20 == 0:
                 vec = ddos_feature_vector(n, packets, distinct, syn, udp,
                                           min(asym / 60.0, 1.0))
-                model.add_sample(vec)  # rolling buffer for drift-retraining
-                strength = model.score(vec)
-                if strength is not None and strength > 1.5:
-                    conf = min(0.75, 0.5 + strength * 0.06)
-                    alerts.append(self._mk(flow, "DDOS_ANOMALY", flow.dst_ip, conf, {
-                        "anomaly_strength": round(strength, 2), "flows": n,
-                        "distinct_src": distinct, "window_s": WINDOW,
-                    }, f"Window profile anomalous vs learned baseline (strength {strength:.2f})"))
+                self.ctx.models.ddos.add_sample(vec)  # rolling buffer for retrain
+                self._pending.append((flow, vec, n, distinct))
+                if len(self._pending) >= _BATCH:
+                    alerts.extend(self._flush())
+        return alerts
+
+    def _flush(self) -> list[Alert]:
+        if not self._pending:
+            return []
+        vecs = [v for _, v, _, _ in self._pending]
+        scores = self.ctx.models.ddos.score_batch(vecs)
+        alerts: list[Alert] = []
+        for (flow, _, n, distinct), strength in zip(self._pending, scores):
+            if strength is not None and strength > 1.5:
+                conf = min(0.75, 0.5 + strength * 0.06)
+                alerts.append(self._mk(flow, "DDOS_ANOMALY", flow.dst_ip, conf, {
+                    "anomaly_strength": round(strength, 2), "flows": n,
+                    "distinct_src": distinct, "window_s": WINDOW,
+                }, f"Window profile anomalous vs learned baseline (strength {strength:.2f})"))
+        self._pending.clear()
         return alerts
 
     @staticmethod
