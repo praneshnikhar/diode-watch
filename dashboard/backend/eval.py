@@ -13,7 +13,7 @@ import json
 import time
 from dataclasses import dataclass, field
 
-EPISODE_GAP = 60.0       # sim-seconds between consecutive flows of one campaign
+EPISODE_GAP = 90.0       # sim-seconds between consecutive flows of one campaign
 EPISODE_GRACE = 120.0    # sim-seconds after episode end before counting it as FN
 ALERT_MATCH_WINDOW = 15.0
 
@@ -28,7 +28,9 @@ class Episode:
     start_ts: float
     last_ts: float
     flow_ids: set[str] = field(default_factory=set)
-    matched_by: str | None = None
+    alerted: bool = False      # at least one alert overlapped this campaign
+    fn_claimed: bool = False   # already counted as a missed campaign
+    seeded: bool = False       # replayed from history at startup (not counted as FN)
     finalized: bool = False
 
 
@@ -58,7 +60,7 @@ class Evaluator:
                 for mid, fields in messages:
                     if mid > self.last_id:
                         self.last_id = mid
-                    self._add_truth(fields)
+                    self._add_truth(fields, seeded=True)
             if len(res[0][1]) < 10000:
                 return
 
@@ -77,7 +79,7 @@ class Evaluator:
                 print(f"[eval] truth poll error: {exc}")
                 await asyncio.sleep(2)
 
-    def _add_truth(self, fields: dict) -> None:
+    def _add_truth(self, fields: dict, seeded: bool = False) -> None:
         try:
             ts = float(fields["ts"])
             cls = fields["class"]
@@ -87,23 +89,29 @@ class Evaluator:
             return
         self.truth_seen += 1
         self.max_ts = max(self.max_ts, ts)
-        self.total_episodes[cls] = self.total_episodes.get(cls, 0)
         k = (cls, key)
         ep = self.episodes.get(k)
         if ep and ts - ep.last_ts <= EPISODE_GAP:
             ep.last_ts = ts
             ep.flow_ids.add(flow_id)
+            ep.seeded = ep.seeded or seeded
         else:
             if ep:
                 ep.finalized = True
                 self.finalized.append(ep)
                 if len(self.finalized) > 5000:
                     self.finalized = self.finalized[-5000:]
-            self.episodes[k] = Episode(cls, key, ts, ts, {flow_id})
+            self.total_episodes[cls] = self.total_episodes.get(cls, 0) + 1
+            self.episodes[k] = Episode(cls, key, ts, ts, {flow_id}, seeded=seeded)
 
     # ------------------------------------------------------------ alert match
     def on_alert(self, alert: dict) -> None:
-        """Called for every alert session (occurrences == 1 message)."""
+        """Called for every alert session (occurrences == 1 message).
+
+        An alert that overlaps a real campaign is a hit (the first alert to
+        cover a campaign counts as TP; repeat alerts on an already-covered
+        campaign are deduplicated). An alert that overlaps no campaign is FP.
+        """
         aid = alert.get("alert_id", "")
         if aid in self.alert_sessions:
             return
@@ -112,42 +120,43 @@ class Evaluator:
         self.max_ts = max(self.max_ts, float(alert.get("ts", 0)))
         flow_id = alert.get("flow_id")
         key = alert.get("key", "")
+        ts = float(alert.get("ts", 0))
 
-        candidates = []
-        for ep in self.finalized:
-            if ep.matched_by:
-                continue
-            if abs(ep.last_ts - float(alert.get("ts", 0))) > ALERT_MATCH_WINDOW + EPISODE_GAP:
-                continue
-            candidates.append(ep)
-        for ep in self.episodes.values():
-            if ep.matched_by:
-                continue
-            candidates.append(ep)
+        window = ALERT_MATCH_WINDOW + EPISODE_GAP
+        overlaps = [
+            ep for ep in self._all_episodes()
+            if _cls_matches(ep.cls, cls)
+            and (flow_id in ep.flow_ids or key == ep.key)
+            and ep.start_ts - window <= ts <= ep.last_ts + window
+        ]
+        if not overlaps:
+            self.fp[cls] = self.fp.get(cls, 0) + 1
+            return
+        if any(not ep.alerted for ep in overlaps):
+            self.tp[cls] = self.tp.get(cls, 0) + 1
+        for ep in overlaps:
+            ep.alerted = True
 
-        for ep in candidates:
-            if _cls_matches(ep.cls, cls) and (flow_id in ep.flow_ids or key == ep.key):
-                ep.matched_by = aid
-                self.tp[cls] = self.tp.get(cls, 0) + 1
-                return
-        self.fp[cls] = self.fp.get(cls, 0) + 1
+    def _all_episodes(self) -> list[Episode]:
+        return [*self.finalized, *self.episodes.values()]
 
     async def _reap(self) -> None:
         """Finalize stale open episodes; count FNs once grace expires."""
         for k, ep in list(self.episodes.items()):
-            if ep.matched_by:
+            if self.max_ts - ep.last_ts > EPISODE_GRACE:
                 ep.finalized = True
                 self.finalized.append(ep)
                 del self.episodes[k]
-            elif self.max_ts - ep.last_ts > EPISODE_GRACE:
-                ep.finalized = True
-                self.finalized.append(ep)
-                del self.episodes[k]
-                self.fn[ep.cls] = self.fn.get(ep.cls, 0) + 1
         for ep in self.finalized:
-            if ep.matched_by is None and self.max_ts - ep.last_ts > EPISODE_GRACE:
-                self.fn[ep.cls] = self.fn.get(ep.cls, 0) + 1
-                ep.matched_by = "__fn__"
+            self._count_fn(ep)
+
+    def _count_fn(self, ep: Episode) -> None:
+        if ep.alerted or ep.seeded or ep.fn_claimed:
+            return
+        if self.max_ts - ep.last_ts <= EPISODE_GRACE:
+            return
+        ep.fn_claimed = True
+        self.fn[ep.cls] = self.fn.get(ep.cls, 0) + 1
 
     def metrics(self) -> dict:
         per_class = {}

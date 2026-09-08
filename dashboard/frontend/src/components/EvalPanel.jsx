@@ -58,9 +58,11 @@ export default function EvalPanel({ evalData }) {
         Method: attack flows carry ground-truth labels on a separate Redis stream
         that the detection engine never reads (enforcing the one-way constraint).
         Consecutive attack flows with the same class+source are grouped into an
-        episode; a detector alert session matched within ±15s to any episode flow
-        is a TP. Unmatched sessions are FP; episodes with no session after a grace
-        window are FN. Evaluation is therefore attack-campaign-level, not flow-level.
+        episode (campaign). An alert that overlaps a campaign counts as a hit —
+        the first alert covering it is a TP, repeat alerts on the same ongoing
+        campaign are deduplicated, and an alert with no campaign overlap is an FP.
+        Episodes never covered by any alert after a grace window are FN.
+        Evaluation is therefore campaign-level, not flow-level.
       </div>
     </>
   )
