@@ -118,6 +118,7 @@ async def main() -> None:
                 metrics.flows.inc()
                 ts_lo = flow.ts if ts_lo is None else min(ts_lo, flow.ts)
                 ts_hi = flow.ts if ts_hi is None else max(ts_hi, flow.ts)
+                ctx.sim_ts = ts_hi
 
                 for det in detectors:
                     for alert in det.process(flow):
@@ -168,7 +169,7 @@ async def throughput_pump(ctx: Context) -> None:
         ctx.metrics.alert_rate.set(aps)
         try:
             await ctx.redis.publish("diode:metrics", json.dumps({
-                "ts": now, "flows_per_sec": round(fps, 1),
+                "ts": now, "sim_ts": ctx.sim_ts, "flows_per_sec": round(fps, 1),
                 "alerts_per_sec": round(aps, 1),
                 "alerts_total": int(a), "flows_total": int(f),
                 "throughput_target": ctx.cfg.throughput_target,

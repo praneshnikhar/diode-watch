@@ -30,6 +30,7 @@ class Context:
     dga_baseline: list[float] = field(default_factory=list)
     baseline_locked: bool = False
     last_drift: float = 0.0
+    sim_ts: float = 0.0  # current simulation time (latest flow ts), for dashboards
 
     def sample_dga_entropy(self, entropy: float) -> None:
         self.dga_samples.append(entropy)

@@ -6,6 +6,18 @@ import {
 
 const SEV_COLORS = { CRITICAL: '#f87171', HIGH: '#fb923c', MEDIUM: '#facc15', LOW: '#94a3b8' }
 
+// Format a simulation-clock value (seconds since sim start) as elapsed time,
+// e.g. "56:00" (56 sim-minutes) or "1:02:30" past an hour.
+const fmtSim = (t) => {
+  if (t == null || Number.isNaN(t)) return ''
+  const h = Math.floor(t / 3600)
+  const m = Math.floor((t % 3600) / 60)
+  const s = Math.floor(t % 60)
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`
+}
+
 export default function Overview({ alerts, history, events }) {
   const byClass = useMemo(() => {
     const m = {}
@@ -76,14 +88,15 @@ export default function Overview({ alerts, history, events }) {
       </div>
 
       <div className="panel">
-        <div className="label" style={{ marginBottom: 10 }}>Throughput (flows/sec, real time)</div>
+        <div className="label" style={{ marginBottom: 10 }}>Throughput (flows/sec) · x-axis = simulation time (time-lapse)</div>
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={history}>
             <CartesianGrid stroke="#1e2836" strokeDasharray="3 3" />
-            <XAxis dataKey="ts" stroke="#6b7a8d" fontSize={10}
-                   tickFormatter={(t) => new Date(t * 1000).toISOString().substr(14, 5)} />
+            <XAxis dataKey="sim_ts" stroke="#6b7a8d" fontSize={10}
+                   tickFormatter={fmtSim} />
             <YAxis stroke="#6b7a8d" fontSize={10} />
-            <Tooltip contentStyle={{ background: '#11161f', border: '1px solid #1e2836' }} />
+            <Tooltip contentStyle={{ background: '#11161f', border: '1px solid #1e2836' }}
+                     labelFormatter={fmtSim} />
             <Line type="monotone" dataKey="flows_per_sec" stroke="#4dd0a1" dot={false} strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
